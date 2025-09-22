@@ -1,11 +1,13 @@
-import { isToolUIPart, UIMessage } from "ai";
 import {
   unstable_createMessageConverter,
+  type FileMessagePart,
+  type ImageMessagePart,
   type ReasoningMessagePart,
-  type ToolCallMessagePart,
-  type TextMessagePart,
   type SourceMessagePart,
+  type TextMessagePart,
+  type ToolCallMessagePart,
 } from "@assistant-ui/react";
+import { isToolUIPart, UIMessage } from "ai";
 
 const convertParts = (message: UIMessage) => {
   if (!message.parts || message.parts.length === 0) {
@@ -13,7 +15,7 @@ const convertParts = (message: UIMessage) => {
   }
 
   return message.parts
-    .filter((p) => p.type !== "step-start" && p.type !== "file")
+    .filter((p) => p.type !== "step-start")
     .map((part) => {
       const type = part.type;
 
@@ -31,6 +33,29 @@ const convertParts = (message: UIMessage) => {
           type: "reasoning",
           text: part.text,
         } satisfies ReasoningMessagePart;
+      }
+
+      if (type === "file") {
+        const { mediaType, url } = part;
+
+        if (mediaType.startsWith("image/")) {
+          return {
+            type: "image",
+            image: url,
+            filename:
+              part.filename ??
+              Date.now().toString() + "." + getImageExt(mediaType),
+          } satisfies ImageMessagePart;
+        }
+
+        return {
+          type: "file",
+          filename:
+            part.filename ??
+            Date.now().toString() + "." + getDataExt(mediaType),
+          data: url,
+          mimeType: mediaType || "application/octet-stream",
+        } satisfies FileMessagePart;
       }
 
       // Handle tool-* parts (AI SDK v5 tool calls)
@@ -209,3 +234,61 @@ export const AISDKMessageConverter = unstable_createMessageConverter(
     }
   },
 );
+
+function getImageExt(mediaType: string) {
+  const ext = mediaType.split("/")[1];
+  switch (ext) {
+    case "jpeg":
+      return "jpg";
+    case "svg+xml":
+      return "svg";
+    default:
+      return ext;
+  }
+}
+
+function getDataExt(mediaType: string) {
+  const [macro, ext] = mediaType.split("/");
+  switch (ext) {
+    case "plain":
+      return "txt";
+    case "ld+json":
+      return "jsonld";
+    case "mpeg":
+      return macro === "video" ? "mpeg" : "mp3";
+    case "webm":
+      return macro === "video" ? "webm" : "weba";
+    case "ogg":
+      switch (macro) {
+        case "video":
+          return "ogv";
+        case "audio":
+          return "oga";
+        case "application":
+          return "ogx";
+        default:
+          return "ogg";
+      }
+    case "javascript":
+      return "js";
+    case "x-sh":
+      return "sh";
+    case "msword":
+      return "doc";
+    case "vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return "docx";
+    case "application/vnd.ms-powerpoint":
+      return "ppt";
+    case "vnd.openxmlformats-officedocument.presentationml.presentation":
+      return "pptx";
+    case "midi":
+      return "mid";
+    case "x-midi":
+      return "midi";
+    default:
+      if (ext?.includes(".")) {
+        return ".bin";
+      }
+      return ext;
+  }
+}
